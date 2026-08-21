@@ -1,14 +1,14 @@
-// Inkpaper MCP server: pushes notifications to an Inkpaper channel webhook
+// Inkwash MCP server: pushes notifications to an Inkwash channel webhook
 // so any MCP client (opencode, Claude Code, Cursor, scripts) can surface
-// messages on the Inkpaper e-ink device - `priority: "high"` makes the
+// messages on the Inkwash e-ink device - `priority: "high"` makes the
 // device show the URGENT screen and ring immediately.
 //
 // Configuration (env vars, registered by the MCP client):
-//   INKPAPER_SERVER_URL    default http://127.0.0.1:8080
-//   INKPAPER_CHANNEL_ID    required, the channel's webhook delivery id
-//   INKPAPER_WEBHOOK_TOKEN required, the channel's `ipwh_` webhook token
+//   INKWASH_SERVER_URL    default http://127.0.0.1:8080
+//   INKWASH_CHANNEL_ID    required, the channel's webhook delivery id
+//   INKWASH_WEBHOOK_TOKEN required, the channel's `ipwh_` webhook token
 //
-// Wire contract mirrors inkpaper-server's `InboxCreateRequest`:
+// Wire contract mirrors inkwash-server's `InboxCreateRequest`:
 //   POST /api/channels/:id/messages
 //   Authorization: Bearer ipwh_...
 //   {"kind":"alert"|"event"|"info","title","body"?,"priority"?,"when"?}
@@ -18,20 +18,20 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const SERVER_URL = process.env.INKPAPER_SERVER_URL ?? "http://127.0.0.1:8080";
-const CHANNEL_ID = process.env.INKPAPER_CHANNEL_ID ?? "";
-const WEBHOOK_TOKEN = process.env.INKPAPER_WEBHOOK_TOKEN ?? "";
+const SERVER_URL = process.env.INKWASH_SERVER_URL ?? "http://127.0.0.1:8080";
+const CHANNEL_ID = process.env.INKWASH_CHANNEL_ID ?? "";
+const WEBHOOK_TOKEN = process.env.INKWASH_WEBHOOK_TOKEN ?? "";
 
 if (!CHANNEL_ID || !WEBHOOK_TOKEN) {
   console.error(
-    "inkpaper-mcp: INKPAPER_CHANNEL_ID and INKPAPER_WEBHOOK_TOKEN are required",
+    "inkwash-mcp: INKWASH_CHANNEL_ID and INKWASH_WEBHOOK_TOKEN are required",
   );
   process.exit(1);
 }
 
 const server = new McpServer(
   {
-    name: "inkpaper",
+    name: "inkwash",
     version: "0.1.0",
   },
   {
@@ -46,7 +46,7 @@ server.registerTool(
   {
     title: "notify",
     description:
-      "Push a notification to the Inkpaper e-ink device via its channel webhook. " +
+      "Push a notification to the Inkwash e-ink device via its channel webhook. " +
       "Use priority high for time-critical alerts - the device shows a full-screen " +
       "URGENT reminder and rings immediately. Normal messages land in the device inbox.",
     inputSchema: {
@@ -63,7 +63,7 @@ server.registerTool(
       kind: z
         .enum(["alert", "event", "info"])
         .default("alert")
-        .describe("Message kind as classified by the Inkpaper server"),
+        .describe("Message kind as classified by the Inkwash server"),
       when: z
         .number()
         .int()
@@ -95,7 +95,7 @@ server.registerTool(
         content: [
           {
             type: "text",
-            text: `Inkpaper server unreachable at ${SERVER_URL}: ${(err as Error).message}`,
+            text: `Inkwash server unreachable at ${SERVER_URL}: ${(err as Error).message}`,
           },
         ],
         isError: true,
@@ -109,7 +109,7 @@ server.registerTool(
         content: [
           {
             type: "text",
-            text: `Inkpaper delivery failed (HTTP ${response.status}): ${detail}`,
+            text: `Inkwash delivery failed (HTTP ${response.status}): ${detail}`,
           },
         ],
         isError: true,
@@ -119,7 +119,7 @@ server.registerTool(
       content: [
         {
           type: "text",
-          text: `Delivered to Inkpaper (HTTP ${response.status}, ${elapsed}ms): ${text}`,
+          text: `Delivered to Inkwash (HTTP ${response.status}, ${elapsed}ms): ${text}`,
         },
       ],
     };
