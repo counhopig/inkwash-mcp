@@ -1,6 +1,6 @@
 {
   "name": "inkwash-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "MCP server exposing the Inkwash server's webhook channels so any agent (opencode, Claude Code, scripts) can push notifications to the Inkwash e-ink device",

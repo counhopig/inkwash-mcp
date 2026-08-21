@@ -18,15 +18,72 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const SERVER_URL = process.env.INKWASH_SERVER_URL ?? "http://127.0.0.1:8080";
-const CHANNEL_ID = process.env.INKWASH_CHANNEL_ID ?? "";
-const WEBHOOK_TOKEN = process.env.INKWASH_WEBHOOK_TOKEN ?? "";
+export const SERVER_URL = process.env.INKWASH_SERVER_URL ?? "http://127.0.0.1:8080";
+export const CHANNEL_ID = process.env.INKWASH_CHANNEL_ID ?? "";
+export const WEBHOOK_TOKEN = process.env.INKWASH_WEBHOOK_TOKEN ?? "";
 
 if (!CHANNEL_ID || !WEBHOOK_TOKEN) {
   console.error(
     "inkwash-mcp: INKWASH_CHANNEL_ID and INKWASH_WEBHOOK_TOKEN are required",
   );
   process.exit(1);
+}
+
+export interface NotifyArgs {
+  kind: "alert" | "event" | "info";
+  title: string;
+  body: string;
+  priority?: "normal" | "high";
+  when?: number;
+}
+
+export interface DeliverResult {
+  ok: boolean;
+  text: string;
+  isError?: boolean;
+}
+
+/// Shared delivery path used by both the MCP `notify` tool and the
+/// stdio notify-client (notify.sh), so every caller speaks one code path.
+export async function deliver(args: NotifyArgs): Promise<DeliverResult> {
+  const url = `${SERVER_URL}/api/channels/${CHANNEL_ID}/messages`;
+  const started = Date.now();
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${WEBHOOK_TOKEN}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        kind: args.kind,
+        title: args.title,
+        body: args.body ?? "",
+        ...(args.priority ? { priority: args.priority } : {}),
+        ...(args.when !== undefined ? { when: args.when } : {}),
+      }),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      isError: true,
+      text: `Inkwash server unreachable at ${SERVER_URL}: ${(err as Error).message}`,
+    };
+  }
+  const elapsed = Date.now() - started;
+  const text = await response.text();
+  if (!response.ok) {
+    return {
+      ok: false,
+      isError: true,
+      text: `Inkwash delivery failed (HTTP ${response.status}): ${text.slice(0, 300)}`,
+    };
+  }
+  return {
+    ok: true,
+    text: `Delivered to Inkwash (HTTP ${response.status}, ${elapsed}ms): ${text}`,
+  };
 }
 
 const server = new McpServer(
@@ -72,56 +129,10 @@ server.registerTool(
     },
   },
   async (args) => {
-    const url = `${SERVER_URL}/api/channels/${CHANNEL_ID}/messages`;
-    const started = Date.now();
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${WEBHOOK_TOKEN}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          kind: args.kind,
-          title: args.title,
-          body: args.body ?? "",
-          ...(args.priority ? { priority: args.priority } : {}),
-          ...(args.when !== undefined ? { when: args.when } : {}),
-        }),
-      });
-    } catch (err) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Inkwash server unreachable at ${SERVER_URL}: ${(err as Error).message}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-    const elapsed = Date.now() - started;
-    const text = await response.text();
-    if (!response.ok) {
-      const detail = text.slice(0, 300);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Inkwash delivery failed (HTTP ${response.status}): ${detail}`,
-          },
-        ],
-        isError: true,
-      };
-    }
+    const result = await deliver(args);
     return {
-      content: [
-        {
-          type: "text",
-          text: `Delivered to Inkwash (HTTP ${response.status}, ${elapsed}ms): ${text}`,
-        },
-      ],
+      content: [{ type: "text", text: result.text }],
+      isError: result.isError,
     };
   },
 );
